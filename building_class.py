@@ -1,7 +1,9 @@
+import argparse
+
 
 class GetBuildingClass:
 
-    def __init__(self):
+    def __init__(self, config):
         questionnaire = Questionnaire()
         self.questions = Questions(questionnaire)
         self.classes = {
@@ -10,62 +12,88 @@ class GetBuildingClass:
             'business': 'Бизнес',
             'elite': 'Премиум'
         }
+        self.config = config
+        self.answers = {'mass': [], 'econom': [], 'business': []}
+        self.commects = {
+            'construction': 'сборно-железобетонная конструкция',
+            'flat_sq_ratio': 'много незадействованного пространства в доме',
+            'sq_threshold': 'маленькая квартира',
+            'ceiling': 'низкий потолок',
+            'bathroom': 'мало ванных комнат',
+            'arch_project': 'типовой архитектурный проект',
+            'territory': 'территория не охраняется',
+            # 'q7': '',
+            'parking': 'мало парковочных мест',
+            'commercials_inside': 'проходной двор'
+        }
 
     def first_algorithm(self):
         # Алгоритм 1. Дифференцирование на группы «массовое жилье» и «жилье повышенной комфортности»
-
-        if self.questions.construction():
-            return 'mass'
-        if self.questions.flat_sq_ratio(ratio=0.7):
-            return 'mass'
-        if not self.questions.sq_threshold(alg_level='mass'):
-            return 'mass'
-        if not self.questions.ceiling(base_height=2.75):
-            return 'mass'
-        if not self.questions.bathroom(base_n_bathrooms=1):
-            return 'mass'
-        if not self.questions.arch_project():
-            return 'mass'
-        # if not self.q7():
-        #     return 'mass'
-        if not self.questions.territory():
-            return 'mass'
-        if not self.questions.parking(carplace_per_flat=1):
-            return 'mass'
-        return 'higher comfort'
+        questions = [
+            ['construction',    self.questions.construction,   dict(),                     True],
+            ['flat_sq_ratio',   self.questions.flat_sq_ratio,  {'ratio': 0.7},             True],
+            ['sq_threshold',    self.questions.sq_threshold,   {'alg_level': 'mass'},      False],
+            ['ceiling',         self.questions.ceiling,        {'base_height': 2.75},      False],
+            ['bathroom',        self.questions.bathroom,       {'base_n_bathrooms': 1},    False],
+            ['arch_project',    self.questions.arch_project,   dict(),                     False],
+            ['territory',       self.questions.territory,      dict(),                     False],
+            # ['q7',            self.questions.q7,             dict(),                     False],
+            ['parking',         self.questions.parking,        {'carplace_per_flat': 1},   False],
+        ]
+        is_flag = False
+        for question, question_func, question_kwargs, true_option in questions:
+            if question_func(**question_kwargs) is true_option:
+                self.answers['mass'].append(question) # из-за чего
+                is_flag = True
+                if not self.config['all']:
+                    break
+        return is_flag
 
     def second_algorithm(self):
         # Алгоритм 2. Дифференцирование массового жилья на эконом- и комфорт- классы
-
-        if self.questions.flat_sq_ratio(ratio=0.75):
-            return 'econom'
-        if not self.questions.sq_threshold(alg_level='econom'):
-            return 'econom'
-        if not self.questions.ceiling(base_height=2.7):
-            return 'econom'
-        return 'comfort'
+        questions = [
+            ['flat_sq_ratio', self.questions.flat_sq_ratio, {'ratio': 0.75}, True],
+            ['sq_threshold', self.questions.sq_threshold, {'alg_level': 'econom'}, False],
+            ['ceiling', self.questions.ceiling, {'base_height': 2.7}, False],
+        ]
+        is_flag = False
+        for question, question_func, question_kwargs, true_option in questions:
+            if question_func(**question_kwargs) is true_option:
+                self.answers['econom'].append(question)  # из-за чего
+                is_flag = True
+                if not self.config['all']:
+                    break
+        return is_flag
 
     def third_algorithm(self):
         # Алгоритм 3.  Дифференцирование жилья повышенной комфортности на бизнес- и элитный классы
+        questions = [
+            ['flat_sq_ratio', self.questions.flat_sq_ratio, {'ratio': 0.65}, True],
+            ['sq_threshold', self.questions.sq_threshold, {'alg_level': 'business'}, False],
+            ['ceiling', self.questions.ceiling, {'base_height': 3}, False],
+            ['parking', self.questions.parking, {'carplace_per_flat': 1.5}, False],
+            ['commercials_inside', self.questions.commercials_inside, dict(), True],
+        ]
+        is_flag = False
+        for question, question_func, question_kwargs, true_option in questions:
+            if question_func(**question_kwargs) is true_option:
+                self.answers['business'].append(question)  # из-за чего
+                is_flag = True
+                if not self.config['all']:
+                    break
+        return is_flag
 
-        if self.questions.flat_sq_ratio(ratio=0.65):
-            return 'business'
-        if not self.questions.sq_threshold(alg_level='business'):
-            return 'business'
-        if not self.questions.ceiling(base_height=3):
-            return 'business'
-        if not self.questions.parking(carplace_per_flat=1.5):
-            return 'business'
-        if self.questions.commercials_inside():
-            return 'business'
-        return 'elite'
 
     def main(self):
-        if self.first_algorithm() == 'mass':
-            result = self.second_algorithm()
+        if self.first_algorithm():
+            result = 'econom' if self.second_algorithm() else 'comfort'
         else:
-            result = self.third_algorithm()
-        return 'Объект относится к классу "{}"'.format(self.classes[result])
+            result = 'business' if self.third_algorithm() else 'elite'
+        response = '\nОбъект относится к классу "{}"'.format(self.classes[result])
+        if self.config['all']:
+            comments = {self.commects[q] for qs in self.answers.values() for q in qs}
+            response += ', потому что:\n\n- ' + '\n- '.join(comments)
+        return response
 
 
 class Questionnaire:
@@ -219,5 +247,17 @@ class Questions:
 
 
 if __name__ == '__main__':
-    processing = GetBuildingClass()
+    parser = argparse.ArgumentParser(
+        description="Здесь можно определить класс жилья по его параметрам",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "-a", "--all",
+        action = "store_true",
+        help="Ответить на все вопросы и получить развернутый ответ. По умолчанию нужно будет ответить на необходимый минимум вопросов и вернется только название класса жилья"
+    )
+    args = parser.parse_args()
+    config = vars(args)
+
+    processing = GetBuildingClass(config)
     print(processing.main())
